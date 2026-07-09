@@ -356,9 +356,8 @@
             credito: { numero: "**** **** **** 8841", vencimiento: "06/29", cvv: "142", tipo: "Cloud Crédito Gold Oro", titular: "Carlo Itzae" }
         };
 
-        // FUNCIÓN MEJORADA: Sincroniza saldos en localStorage local para la pantalla externa
+        // NOTIFICAR SALDOS Y ENVIAR AL PUENTE DE APPMYSITE
         function notificarAppMySite(saldosActuales) {
-            // Guardar localmente para la otra pestaña/pantalla HTML
             localStorage.setItem('bancarlo_balances', JSON.stringify(saldosActuales));
 
             const dataPayload = {
@@ -455,10 +454,10 @@
                         let transferReceived = balances.debito - oldDebito;
                         showLiveTransferAlert(transferReceived);
                         
-                        // Guardar abono automático en el historial compartido
                         const now = new Date();
                         const formattedDate = now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-                        saveTransactionToStorage("Abono de Fondos (Firebase)", formattedDate, transferReceived, "credit");
+                        saveTransactionToStorage("Abono recibido (Firebase)", formattedDate, transferReceived, "credit");
+                        loadHistory();
                     }
                 } else {
                     balances = { debito: 100.00, credito: 2000.00 };
@@ -493,7 +492,7 @@
                 }
                 historyBox.innerHTML = '';
                 transactions.forEach(tx => {
-                    renderTransaction(tx.email, tx.date, tx.amount, tx.type);
+                    renderTransaction(tx.email, tx.date, tx.amount, tx.type || "debit");
                 });
             } else {
                 showEmptyHistoryMessage();
@@ -515,7 +514,7 @@
             const isCredit = type === "credit";
             const sign = isCredit ? "+$" : "-$";
             const color = isCredit ? "#10b981" : "#ef4444";
-            const prefix = isCredit ? "Recibido de" : "Para Cloud";
+            const prefix = isCredit ? "Recibido" : "Para Cloud";
 
             const itemHtml = `
                 <div class="history-item">
@@ -536,11 +535,15 @@
             }
             transactions.push({ email, date, amount, type });
             localStorage.setItem('bank_history', JSON.stringify(transactions));
+            
+            // Forzar disparo manual del evento storage para navegadores locales
+            window.dispatchEvent(new Event('storage'));
         }
 
         function clearHistory() {
             localStorage.removeItem('bank_history');
             showEmptyHistoryMessage();
+            window.dispatchEvent(new Event('storage'));
         }
 
         connectToMyAccount();
@@ -640,7 +643,7 @@
             .then(() => { 
                 const now = new Date();
                 const formattedDate = now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-                saveTransactionToStorage(`Ajuste Admin (${selectedCardType.toUpperCase()})`, formattedDate, amount, typeTx);
+                saveTransactionToStorage(`Ajuste Fondo (${selectedCardType.toUpperCase()})`, formattedDate, amount, typeTx);
                 loadHistory();
                 closeModal('admin-modal'); 
             })
@@ -704,8 +707,8 @@
                     const now = new Date();
                     const formattedDate = now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
                     
-                    renderTransaction(destEmail, formattedDate, amount, "debit");
                     saveTransactionToStorage(destEmail, formattedDate, amount, "debit");
+                    loadHistory();
 
                     statusBox.className = "status-msg success";
                     statusBox.innerText = `💸 ¡Transferencia en línea exitosa! Saldo actualizado para ambos dispositivos.`;
