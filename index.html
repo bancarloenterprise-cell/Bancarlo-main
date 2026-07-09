@@ -264,10 +264,12 @@
     </div>
     <div class="history-container" id="history-box"></div>
 
+    <!-- BOTÓN FINAL PARA CAMBIAR EL NIP -->
     <div style="padding: 20px 15px 10px 15px;">
         <button class="btn-bank" style="background-color: #1e293b; color: #10b981; border: 1px solid #10b981; padding: 12px; font-size: 13px;" onclick="openNipAuthModal()">🔒 Configuración de NIP Transaccional</button>
     </div>
 
+    <!-- MODAL 1: AUTENTICACIÓN PARA ACCEDER AL CAMBIO DE NIP -->
     <div id="nip-auth-modal" class="modal">
         <div class="modal-content">
             <div class="modal-title">Acceso Protegido</div>
@@ -281,6 +283,7 @@
         </div>
     </div>
 
+    <!-- MODAL 2: PANEL PARA CAMBIAR EL NIP -->
     <div id="nip-change-modal" class="modal">
         <div class="modal-content">
             <div class="modal-title">Cambiar NIP Transaccional</div>
@@ -312,6 +315,7 @@
         </div>
     </div>
 
+    <!-- MODAL ADMINISTRATIVO DE FONDOS (TEXTOS MODIFICADOS) -->
     <div id="admin-modal" class="modal">
         <div class="modal-content">
             <div class="modal-title" id="modal-card-title">Gestionar Fondos</div>
@@ -355,24 +359,6 @@
             debito: { numero: "**** **** **** 4829", vencimiento: "12/30", cvv: "395", tipo: "Cloud Débito Internacional", titular: "Carlo Itzae" },
             credito: { numero: "**** **** **** 8841", vencimiento: "06/29", cvv: "142", tipo: "Cloud Crédito Gold Oro", titular: "Carlo Itzae" }
         };
-
-        // NOTIFICAR SALDOS Y ENVIAR AL PUENTE DE APPMYSITE
-        function notificarAppMySite(saldosActuales) {
-            localStorage.setItem('bancarlo_balances', JSON.stringify(saldosActuales));
-
-            const dataPayload = {
-                evento: "actualizar_estado_cuenta",
-                debito: saldosActuales.debito,
-                credito: saldosActuales.credito,
-                usuario: myAccountEmail
-            };
-
-            if (window.Android && window.Android.postMessage) {
-                window.Android.postMessage(JSON.stringify(dataPayload));
-            } else if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.toggleMessageHandler) {
-                window.webkit.messageHandlers.toggleMessageHandler.postMessage(dataPayload);
-            }
-        }
 
         function getActiveNip() {
             const savedNip = localStorage.getItem('bancarlo_user_nip');
@@ -453,11 +439,6 @@
                     if (!isInitialLoad && balances.debito > oldDebito) {
                         let transferReceived = balances.debito - oldDebito;
                         showLiveTransferAlert(transferReceived);
-                        
-                        const now = new Date();
-                        const formattedDate = now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-                        saveTransactionToStorage("Abono recibido (Firebase)", formattedDate, transferReceived, "credit");
-                        loadHistory();
                     }
                 } else {
                     balances = { debito: 100.00, credito: 2000.00 };
@@ -468,8 +449,6 @@
 
                 document.getElementById('balance-debito').innerText = '$' + balances.debito.toLocaleString('es-MX', {minimumFractionDigits: 2});
                 document.getElementById('balance-credito').innerText = '$' + balances.credito.toLocaleString('es-MX', {minimumFractionDigits: 2});
-                
-                notificarAppMySite(balances);
             });
         }
 
@@ -492,7 +471,7 @@
                 }
                 historyBox.innerHTML = '';
                 transactions.forEach(tx => {
-                    renderTransaction(tx.email, tx.date, tx.amount, tx.type || "debit");
+                    renderTransaction(tx.email, tx.date, tx.amount);
                 });
             } else {
                 showEmptyHistoryMessage();
@@ -506,44 +485,35 @@
                 </div>`;
         }
 
-        function renderTransaction(email, date, amount, type = "debit") {
+        function renderTransaction(email, date, amount) {
             const historyBox = document.getElementById('history-box');
             const emptyMsg = document.getElementById('empty-history-msg');
             if (emptyMsg) emptyMsg.remove();
 
-            const isCredit = type === "credit";
-            const sign = isCredit ? "+$" : "-$";
-            const color = isCredit ? "#10b981" : "#ef4444";
-            const prefix = isCredit ? "Recibido" : "Para Cloud";
-
             const itemHtml = `
                 <div class="history-item">
                     <div class="tx-info">
-                        <div class="tx-user">${prefix}: ${email}</div>
+                        <div class="tx-user">Para Cloud: ${email}</div>
                         <div class="tx-date">${date}</div>
                     </div>
-                    <div class="tx-amount" style="color: ${color};">${sign}${parseFloat(amount).toFixed(2)}</div>
+                    <div class="tx-amount" style="color: #ef4444;">-$${parseFloat(amount).toFixed(2)}</div>
                 </div>`;
             historyBox.insertAdjacentHTML('afterbegin', itemHtml);
         }
 
-        function saveTransactionToStorage(email, date, amount, type = "debit") {
+        function saveTransactionToStorage(email, date, amount) {
             let transactions = [];
             const savedHistory = localStorage.getItem('bank_history');
             if (savedHistory) {
                 transactions = JSON.parse(savedHistory);
             }
-            transactions.push({ email, date, amount, type });
+            transactions.push({ email, date, amount });
             localStorage.setItem('bank_history', JSON.stringify(transactions));
-            
-            // Forzar disparo manual del evento storage para navegadores locales
-            window.dispatchEvent(new Event('storage'));
         }
 
         function clearHistory() {
             localStorage.removeItem('bank_history');
             showEmptyHistoryMessage();
-            window.dispatchEvent(new Event('storage'));
         }
 
         connectToMyAccount();
@@ -619,8 +589,6 @@
             }
 
             let newBalance = balances[selectedCardType];
-            let typeTx = "debit";
-
             if (operation === 'add') {
                 if (selectedCardType === 'credito' && (balances.credito + amount) > 2000.00) {
                     modalStatus.className = "status-msg error";
@@ -628,7 +596,6 @@
                     return;
                 }
                 newBalance += amount;
-                typeTx = "credit";
             } else {
                 if (amount > balances[selectedCardType]) {
                     modalStatus.className = "status-msg error";
@@ -636,17 +603,10 @@
                     return;
                 }
                 newBalance -= amount;
-                typeTx = "debit";
             }
 
             database.ref('users/' + myCleanKey + '/' + selectedCardType).set(newBalance)
-            .then(() => { 
-                const now = new Date();
-                const formattedDate = now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
-                saveTransactionToStorage(`Ajuste Fondo (${selectedCardType.toUpperCase()})`, formattedDate, amount, typeTx);
-                loadHistory();
-                closeModal('admin-modal'); 
-            })
+            .then(() => { closeModal('admin-modal'); })
             .catch(err => {
                 modalStatus.className = "status-msg error";
                 modalStatus.innerText = "❌ Error en Firebase.";
@@ -707,8 +667,8 @@
                     const now = new Date();
                     const formattedDate = now.toLocaleDateString('es-MX', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
                     
-                    saveTransactionToStorage(destEmail, formattedDate, amount, "debit");
-                    loadHistory();
+                    renderTransaction(destEmail, formattedDate, amount);
+                    saveTransactionToStorage(destEmail, formattedDate, amount);
 
                     statusBox.className = "status-msg success";
                     statusBox.innerText = `💸 ¡Transferencia en línea exitosa! Saldo actualizado para ambos dispositivos.`;
